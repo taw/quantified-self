@@ -1,0 +1,37 @@
+#!/usr/bin/env ruby
+
+require "beeminder"
+
+class Beeminder::Goal
+  def days_to_lose
+    (losedate.to_date - Date.today).to_i
+  end
+  def goal_time
+    (Time.now.to_i - @initday)/(3600*24) + 1
+  end
+end
+
+token = File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
+goals = Beeminder::User.new(token).goals.select{|g|
+  g.days_to_lose >= 0 && g.goal_type == :hustler
+}
+
+value_by_day = Hash.new(0)
+
+goals.each do |goal|
+  total = goal.curval
+  goal.datapoints.each do |d|
+    value_by_day[d.timestamp.to_date] += d.value/total
+  end
+end
+
+# Scale so it averages to 1/day
+total       = value_by_day.values.sum
+start_date  = value_by_day.keys.min
+end_date    = value_by_day.keys.max
+scale = (end_date - start_date + 1) / total
+
+(start_date..end_date).each do |d|
+  value = value_by_day[d]
+  puts "#{ d.strftime("%Y-%m-%d") } #{ '%.4f' % [scale*value] }"
+end
