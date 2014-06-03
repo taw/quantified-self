@@ -20,16 +20,23 @@ class Beeminder::Goal
   def goal_time
     (Time.now.to_i - @initday)/(3600*24) + 1
   end
+  def per_week
+    7*curval/goal_time
+  end
+  def relative_target_velocity
+    rate / per_week
+  end
 end
 
 token = File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
 goals = Beeminder::User.new(token).goals.select{|g| g.days_to_lose >= 0 && g.goal_type == :hustler }
+
 puts "Beeminder status:"
 goals.sort_by(&:days_to_lose).each_with_index do |g,i|
   dtl = '%2d' % (g.days_to_lose-1)
   dtl = green("#{dtl}") if i == 0
-  per_week = 7*g.curval/g.goal_time
-  puts "* #{'%20s' % g.title} - #{dtl} days to fail (#{g.curval.round}/#{g.goal_time}d, #{per_week.round(2)}/week)"
+  puts "* #{'%20s' % g.title} - #{dtl} days to fail (#{g.curval.round}/#{g.goal_time}d, actual=#{g.per_week.round(2)}/week, target=#{g.rate.round(2)}/week, rtv=#{g.relative_target_velocity.round(2)})"
 end
-avg = (goals.map(&:days_to_lose).avg-1).round(2)
-puts "Avearge: #{green(avg.to_s)}"
+
+puts "Avearge: #{ green( (goals.map(&:days_to_lose).avg-1).round(2).to_s ) }"
+puts "Relative target velocity: #{ goals.map(&:relative_target_velocity).avg.round(2) }"
