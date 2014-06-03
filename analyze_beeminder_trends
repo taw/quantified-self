@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+
+require "date"
+
+class Date
+  # Week starts of Monday, not Sunday
+  def real_wday
+    if wday == 0
+      6
+    else
+      wday - 1
+    end
+  end
+end
+
+class Array
+  def sum
+    inject(0.0, &:+)
+  end
+  def avg
+    sum / size
+  end
+end
+
+# Some of it might be slightly weird due to incomplete weeks and start and end of data
+class BeeminderTrendsAnalysis
+  attr_reader :raw_data
+
+  def initialize(path)
+    read_data!(path)
+  end
+
+  def read_data!(path)
+    @raw_data = File.open(path) do |fh|
+      fh.readlines.map do |line|
+        date, v = line.chomp.split(' ', 2)
+        [Date.parse(date), v.to_f]
+      end
+    end
+  end
+
+  def weekly_component
+    @weekly_component ||= begin
+      weekly_component = @raw_data.group_by{|d,v| d.real_wday}.sort.map{|wday, wdata| wdata.map(&:last).avg }
+      weekly_component.map{|w| w - weekly_component.avg}
+    end
+  end
+
+  def weekly_corrected_data
+    weekly_corrected_data ||= raw_data.map{|d,v|
+      [d, v - weekly_component[d.real_wday]]
+    }
+  end
+
+  def weekly_averages
+    @weekly_averages ||= begin
+      raw_data.group_by{|d,v| d-d.real_wday}.map do |ws, wdata|
+        [ws, wdata.map(&:last).avg]
+      end
+    end
+  end
+end
+
+bta = BeeminderTrendsAnalysis.new(ARGV[0])
+
+bta.weekly_averages.each do |d, v|
+  puts "#{ d.strftime("%Y-%m-%d") } #{ '%.4f' % v }"
+end
+
