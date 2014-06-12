@@ -11,27 +11,45 @@ class Beeminder::Goal
   end
 end
 
+class Beeminder::Datapoint
+  def date
+    timestamp.to_date
+  end
+end
+
 token = File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
 goals = Beeminder::User.new(token).goals.select{|g|
   g.days_to_lose >= 0 && g.goal_type == :hustler
 }
 
-value_by_day = Hash.new(0)
+values_by_day = {}
 
 goals.each do |goal|
   total = goal.curval
   goal.datapoints.each do |d|
-    value_by_day[d.timestamp.to_date] += d.value/total
+    next if d.value == 0
+    values_by_day[d.date] ||= {}
+    values_by_day[d.date][goal.slug] ||= 0
+    values_by_day[d.date][goal.slug] += d.value/total
   end
 end
 
 # Scale so it averages to 1/day
-total       = value_by_day.values.sum
-start_date  = value_by_day.keys.min
-end_date    = value_by_day.keys.max
-scale = (end_date - start_date + 1) / total
+# It will simply by goals.size (plus minus some rounding)
+total      = values_by_day.values.map(&:values).flatten.sum
+start_date = values_by_day.keys.min
+end_date   = [Date.today, *values_by_day.keys].max
+scale      = (end_date - start_date + 1) / total
 
 (start_date..end_date).each do |d|
-  value = value_by_day[d]
-  puts "#{ d.strftime("%Y-%m-%d") } #{ '%.4f' % [scale*value] }"
+  values = values_by_day[d] || {}
+  value = values.values.sum * scale
+  date = d.strftime("%Y-%m-%d")
+
+  if ARGV[0] == "--verbose"
+    details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
+    puts "#{ date } #{ '%.2f' % value } #{ details }"
+  else
+    puts "#{ date } #{ '%.2f' % value }"
+  end
 end
