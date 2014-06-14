@@ -44,12 +44,12 @@ scale      = (end_date - start_date + 1) / total
 (start_date..end_date).each do |d|
   values = values_by_day[d] || {}
   value = values.values.sum * scale
-  date = d.strftime("%Y-%m-%d")
+  date = d.strftime("%Y-%m-%d %a")
+  details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
 
   if ARGV[0] == "--verbose"
-    details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
-    puts "#{ date } #{ '%.2f' % value } #{ details }"
+    puts "#{ date }  #{ '%.2f' % value }  #{ details }"
   else
-    puts "#{ date } #{ '%.2f' % value }"
+    puts "#{ date }  #{ '%.2f' % value }"
   end
 end
