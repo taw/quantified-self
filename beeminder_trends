@@ -70,25 +70,28 @@ class BeeminderTrends
     @active_goals ||= Beeminder::User.new(token).active_goals
   end
 
+  def each_datapoint
+    goals.each do |goal|
+      goal.datapoints.reject(&:blank?).each do |dp|
+        yield(dp)
+      end
+    end
+  end
+
   def report_weekly!
     values_by_week = Hash.new{|ht,k| ht[k] = Hash.new(0)}
 
-    goals.each do |goal|
-      total = goal.curval
-      goal.datapoints.each do |d|
-        next if d.blank?
-        values_by_week[d.date.first_weekday][goal.slug] += d.relative_value
-      end
+    each_datapoint do |dp|
+      values_by_week[dp.date.first_weekday][dp.goal.slug] += dp.relative_value
     end
 
-    total      = values_by_week.values.map(&:values).flatten.sum
     start_date = values_by_week.keys.min
     end_date   = [Date.today.first_weekday, *values_by_week.keys].max
-    scale      = (end_date - start_date + 7) / total
+    scale      = (end_date - start_date + 7) / goals.size
 
     (start_date..end_date).each do |d|
       next unless d == d.first_weekday
-      values = values_by_week[d] || {}
+      values = values_by_week[d]
       date = d.strftime("%Y-%m-%d")
       report_datapoint(date, values, scale)
     end
@@ -97,20 +100,16 @@ class BeeminderTrends
   def report_daily!
     values_by_day = Hash.new{|ht,k| ht[k] = Hash.new(0)}
 
-    goals.each do |goal|
-      goal.datapoints.each do |d|
-        next if d.blank?
-        values_by_day[d.date][goal.slug] += d.relative_value
-      end
+    each_datapoint do |dp|
+      values_by_day[dp.date][dp.goal.slug] += dp.relative_value
     end
 
-    total      = values_by_day.values.map(&:values).flatten.sum
     start_date = values_by_day.keys.min
     end_date   = [Date.today, *values_by_day.keys].max
-    scale      = (end_date - start_date + 1) / total
+    scale      = (end_date - start_date + 1) / goals.size
 
     (start_date..end_date).each do |d|
-      values = values_by_day[d] || {}
+      values = values_by_day[d]
       date = d.strftime("%Y-%m-%d %a")
       report_datapoint(date, values, scale)
     end
