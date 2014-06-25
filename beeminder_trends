@@ -3,6 +3,12 @@
 require "beeminder"
 require "trollop"
 
+class Hash
+  def map_values
+    Hash[map{|k,v| [k, yield(v)]}]
+  end
+end
+
 class Date
   # Week starts of Monday, not Sunday
   def real_wday
@@ -51,14 +57,14 @@ class BeeminderTrends
     @verbose = verbose
   end
 
-  def report_datapoint(date, values, scale)
-    total = values.values.sum * scale
-    details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
+  def report_datapoint(date, values)
+    total = values.values.sum
+    details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v]}.join(" ")
 
     if @verbose
-      puts "#{ date }  #{ '%.2f' % total }  #{ details }"
+      puts "#{date}  #{'%.2f' % total}  #{details}"
     else
-      puts "#{ date }  #{ '%.2f' % total }"
+      puts "#{date}  #{'%.2f' % total}"
     end
   end
 
@@ -78,6 +84,12 @@ class BeeminderTrends
     end
   end
 
+  def weekly_report_range(values_by_week)
+    start_date = values_by_week.keys.min
+    end_date   = [Date.today.first_weekday, *values_by_week.keys].max
+    (start_date..end_date).to_a.select(&:monday?)
+  end
+
   def report_weekly!
     values_by_week = Hash.new{|ht,k| ht[k] = Hash.new(0)}
 
@@ -85,16 +97,18 @@ class BeeminderTrends
       values_by_week[dp.date.first_weekday][dp.goal.slug] += dp.relative_value
     end
 
-    start_date = values_by_week.keys.min
-    end_date   = [Date.today.first_weekday, *values_by_week.keys].max
-    scale      = (end_date - start_date + 7) / goals.size
+    range = weekly_report_range(values_by_week)
+    scale = 7 * range.size / goals.size
 
-    (start_date..end_date).each do |d|
-      next unless d == d.first_weekday
-      values = values_by_week[d]
-      date = d.strftime("%Y-%m-%d")
-      report_datapoint(date, values, scale)
+    range.each do |d|
+      report_datapoint(d.strftime("%Y-%m-%d"), values_by_week[d].map_values{|x| x*scale})
     end
+  end
+
+  def daily_report_range(values_by_day)
+    start_date = values_by_day.keys.min
+    end_date   = [Date.today, *values_by_day.keys].max
+    (start_date..end_date).to_a
   end
 
   def report_daily!
@@ -104,16 +118,12 @@ class BeeminderTrends
       values_by_day[dp.date][dp.goal.slug] += dp.relative_value
     end
 
-    start_date = values_by_day.keys.min
-    end_date   = [Date.today, *values_by_day.keys].max
-    scale      = (end_date - start_date + 1) / goals.size
+    range = daily_report_range(values_by_day)
+    scale = range.size / goals.size
 
-    (start_date..end_date).each do |d|
-      values = values_by_day[d]
-      date = d.strftime("%Y-%m-%d %a")
-      report_datapoint(date, values, scale)
+    range.each do |d|
+      report_datapoint(d.strftime("%Y-%m-%d %a"), values_by_day[d].map_values{|x| x*scale})
     end
-
   end
 end
 
