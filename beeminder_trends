@@ -38,6 +38,12 @@ class Beeminder::Datapoint
   def date
     timestamp.to_date
   end
+  def relative_value
+    value / goal.curval
+  end
+  def blank?
+    value == 0
+  end
 end
 
 class BeeminderTrends
@@ -70,14 +76,15 @@ class BeeminderTrends
     goals.each do |goal|
       total = goal.curval
       goal.datapoints.each do |d|
-        values_by_week[d.date.first_weekday][goal.slug] += d.value/total if d.value > 0
+        next if d.blank?
+        values_by_week[d.date.first_weekday][goal.slug] += d.relative_value
       end
     end
 
     total      = values_by_week.values.map(&:values).flatten.sum
     start_date = values_by_week.keys.min
     end_date   = [Date.today.first_weekday, *values_by_week.keys].max
-    scale      = (end_date - start_date + 1) / total
+    scale      = (end_date - start_date + 7) / total
 
     (start_date..end_date).each do |d|
       next unless d == d.first_weekday
@@ -91,9 +98,9 @@ class BeeminderTrends
     values_by_day = Hash.new{|ht,k| ht[k] = Hash.new(0)}
 
     goals.each do |goal|
-      total = goal.curval
       goal.datapoints.each do |d|
-        values_by_day[d.date][goal.slug] += d.value/total if d.value > 0
+        next if d.blank?
+        values_by_day[d.date][goal.slug] += d.relative_value
       end
     end
 
