@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "beeminder"
+require "trollop"
 
 class Beeminder::Goal
   def days_to_lose
@@ -15,6 +16,10 @@ class Beeminder::Datapoint
   def date
     timestamp.to_date
   end
+end
+
+opts = Trollop::options do
+  opt :verbose, "Print subtotal contributions"
 end
 
 token = File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
@@ -47,7 +52,7 @@ scale      = (end_date - start_date + 1) / total
   date = d.strftime("%Y-%m-%d %a")
   details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
 
-  if ARGV[0] == "--verbose"
+  if opts[:verbose]
     puts "#{ date }  #{ '%.2f' % value }  #{ details }"
   else
     puts "#{ date }  #{ '%.2f' % value }"
