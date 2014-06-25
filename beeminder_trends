@@ -3,6 +3,28 @@
 require "beeminder"
 require "trollop"
 
+class Date
+  # Week starts of Monday, not Sunday
+  def real_wday
+    if wday == 0
+      6
+    else
+      wday - 1
+    end
+  end
+  def first_weekday
+    self - real_wday
+  end
+end
+
+class Beeminder::User
+  def active_goals
+    goals.select{|g|
+      g.days_to_lose >= 0 && g.goal_type == :hustler
+    }
+  end
+end
+
 class Beeminder::Goal
   def days_to_lose
     (losedate.to_date - Date.today).to_i
@@ -18,43 +40,86 @@ class Beeminder::Datapoint
   end
 end
 
+class BeeminderTrends
+  def initialize(verbose)
+    @verbose = verbose
+  end
+
+  def report_datapoint(date, values, scale)
+    total = values.values.sum * scale
+    details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
+
+    if @verbose
+      puts "#{ date }  #{ '%.2f' % total }  #{ details }"
+    else
+      puts "#{ date }  #{ '%.2f' % total }"
+    end
+  end
+
+  def token
+    @token ||= File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
+  end
+
+  def goals
+    @active_goals ||= Beeminder::User.new(token).active_goals
+  end
+
+  def report_weekly!
+    values_by_week = Hash.new{|ht,k| ht[k] = Hash.new(0)}
+
+    goals.each do |goal|
+      total = goal.curval
+      goal.datapoints.each do |d|
+        values_by_week[d.date.first_weekday][goal.slug] += d.value/total if d.value > 0
+      end
+    end
+
+    total      = values_by_week.values.map(&:values).flatten.sum
+    start_date = values_by_week.keys.min
+    end_date   = [Date.today.first_weekday, *values_by_week.keys].max
+    scale      = (end_date - start_date + 1) / total
+
+    (start_date..end_date).each do |d|
+      next unless d == d.first_weekday
+      values = values_by_week[d] || {}
+      date = d.strftime("%Y-%m-%d")
+      report_datapoint(date, values, scale)
+    end
+  end
+
+  def report_daily!
+    values_by_day = Hash.new{|ht,k| ht[k] = Hash.new(0)}
+
+    goals.each do |goal|
+      total = goal.curval
+      goal.datapoints.each do |d|
+        values_by_day[d.date][goal.slug] += d.value/total if d.value > 0
+      end
+    end
+
+    total      = values_by_day.values.map(&:values).flatten.sum
+    start_date = values_by_day.keys.min
+    end_date   = [Date.today, *values_by_day.keys].max
+    scale      = (end_date - start_date + 1) / total
+
+    (start_date..end_date).each do |d|
+      values = values_by_day[d] || {}
+      date = d.strftime("%Y-%m-%d %a")
+      report_datapoint(date, values, scale)
+    end
+
+  end
+end
+
 opts = Trollop::options do
   opt :verbose, "Print subtotal contributions"
+  opt :weekly, "Aggregate data weekly"
 end
 
-token = File.read("#{ENV["HOME"]}/.beeminder_auth_token").chomp
-goals = Beeminder::User.new(token).goals.select{|g|
-  g.days_to_lose >= 0 && g.goal_type == :hustler
-}
+bt = BeeminderTrends.new(opts[:verbose])
 
-values_by_day = {}
-
-goals.each do |goal|
-  total = goal.curval
-  goal.datapoints.each do |d|
-    next if d.value == 0
-    values_by_day[d.date] ||= {}
-    values_by_day[d.date][goal.slug] ||= 0
-    values_by_day[d.date][goal.slug] += d.value/total
-  end
-end
-
-# Scale so it averages to 1/day
-# It will simply by goals.size (plus minus some rounding)
-total      = values_by_day.values.map(&:values).flatten.sum
-start_date = values_by_day.keys.min
-end_date   = [Date.today, *values_by_day.keys].max
-scale      = (end_date - start_date + 1) / total
-
-(start_date..end_date).each do |d|
-  values = values_by_day[d] || {}
-  value = values.values.sum * scale
-  date = d.strftime("%Y-%m-%d %a")
-  details = values.sort_by{|k,v| [-v,k]}.map{|k,v| "%s:%.2f" % [k, v*scale]}.join(" ")
-
-  if opts[:verbose]
-    puts "#{ date }  #{ '%.2f' % value }  #{ details }"
-  else
-    puts "#{ date }  #{ '%.2f' % value }"
-  end
+if opts[:weekly]
+  bt.report_weekly!
+else
+  bt.report_daily!
 end
