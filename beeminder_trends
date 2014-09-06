@@ -45,7 +45,7 @@ class Beeminder::Datapoint
     timestamp.to_date
   end
   def relative_value
-    value / goal.curval
+    goal.goal_time * value / goal.curval
   end
   def blank?
     value == 0
@@ -98,7 +98,7 @@ class BeeminderTrends
     end
 
     range = weekly_report_range(values_by_week)
-    scale = 7 * range.size / goals.size
+    scale = 7.0 / goals.size
 
     range.each do |d|
       report_datapoint(d.strftime("%Y-%m-%d"), values_by_week[d].map_values{|x| x*scale})
@@ -119,7 +119,7 @@ class BeeminderTrends
     end
 
     range = daily_report_range(values_by_day)
-    scale = range.size / goals.size
+    scale = 1.0 / goals.size
 
     range.each do |d|
       report_datapoint(d.strftime("%Y-%m-%d %a"), values_by_day[d].map_values{|x| x*scale})
