@@ -42,7 +42,7 @@ end
 
 class Beeminder::Datapoint
   def date
-    timestamp.to_date
+    Date.parse(@daystamp)
   end
   def relative_value
     goal.goal_time * value / goal.curval
